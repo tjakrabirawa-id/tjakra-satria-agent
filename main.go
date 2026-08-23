@@ -10,7 +10,10 @@
 // Usage:
 //
 //	tjakra-ap-agent enroll -server https://pentest-api.tjakrabirawa.id -token <token>
-//	tjakra-ap-agent run [-log-file /var/log/app.log] [-enforce] [-console] [-poll 5s]
+//	tjakra-ap-agent run [-log-file /var/log/app.log] [-enforce] [-console] [-block-container NAME] [-poll 5s]
+//
+// Run on the host for full console reach and pass -block-container to keep blocks
+// scoped to a target container's network namespace instead of the host.
 package main
 
 import (
@@ -131,6 +134,7 @@ func cmdRun(args []string) {
 	logFile := fs.String("log-file", "", "optional log file to tail and ship")
 	enforce := fs.Bool("enforce", false, "actually apply destructive actions (default is a dry-run)")
 	console := fs.Bool("console", false, "enable the admin remote console (run_command); off by default")
+	blockContainer := fs.String("block-container", "", "apply blocks inside this container's network namespace via nsenter, so a host-run agent keeps blocks scoped to the target instead of the host")
 	poll := fs.Duration("poll", 5*time.Second, "command poll interval")
 	insecure := fs.Bool("insecure", false, "skip TLS verification (dev only)")
 	_ = fs.Parse(args)
@@ -152,17 +156,20 @@ func cmdRun(args []string) {
 	if *console {
 		fmt.Println("remote console enabled: an admin operator can run commands on this host through the platform")
 	}
+	if *blockContainer != "" {
+		fmt.Printf("blocks scope to container %q network namespace (nsenter)\n", *blockContainer)
+	}
 	if *logFile != "" {
 		go shipLogs(cfg, client, *logFile)
 	}
 	fmt.Printf("agent %s polling %s every %s\n", cfg.AgentID, cfg.Server, poll.String())
 	for {
-		pollCommands(cfg, client, *enforce, *console)
+		pollCommands(cfg, client, *enforce, *console, *blockContainer)
 		time.Sleep(*poll)
 	}
 }
 
-func pollCommands(cfg config, client *http.Client, enforce, console bool) {
+func pollCommands(cfg config, client *http.Client, enforce, console bool, blockContainer string) {
 	req, _ := http.NewRequest(http.MethodGet, cfg.Server+"/api/v1/agent/commands", nil)
 	req.Header.Set("Authorization", "Bearer "+cfg.AgentKey)
 	resp, err := client.Do(req)
@@ -186,7 +193,7 @@ func pollCommands(cfg config, client *http.Client, enforce, console bool) {
 			postResult(cfg, client, cmd.ID, "failed", map[string]any{"error": "refused: " + reason})
 			continue
 		}
-		res := executeCommand(cmd, enforce, console)
+		res := executeCommand(cmd, enforce, console, blockContainer)
 		postResult(cfg, client, cmd.ID, res.Status, res.Result)
 	}
 }

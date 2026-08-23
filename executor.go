@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -24,16 +25,16 @@ type execResult struct {
 	Result map[string]any
 }
 
-func executeCommand(cmd command, enforce, console bool) execResult {
+func executeCommand(cmd command, enforce, console bool, blockContainer string) execResult {
 	var params map[string]any
 	_ = json.Unmarshal(cmd.Params, &params)
 	target, _ := params["target"].(string)
 
 	switch cmd.Action {
 	case "block_ip":
-		return runFirewall("block", target, enforce)
+		return runFirewall("block", target, enforce, blockContainer)
 	case "revert_block":
-		return runFirewall("revert", target, enforce)
+		return runFirewall("revert", target, enforce, blockContainer)
 	case "disable_user":
 		return runDisableUser(target, enforce)
 	case "isolate_host":
@@ -79,7 +80,14 @@ func iptablesArgs(op, target string) []string {
 	return []string{"-I", "INPUT", "-s", target, "-j", "DROP"}
 }
 
-func runFirewall(op, target string, enforce bool) execResult {
+// runFirewall applies or reverts an iptables DROP for a source IP. When
+// blockContainer is set (a host-run agent that must scope blocks to a target's
+// network namespace), the rule runs inside that container's netns via nsenter, so a
+// DROP lands only in the target and never touches the host netfilter. When it is
+// empty the rule runs in the agent's own netns, correct on a host that is itself the
+// isolation boundary. This is what lets the agent run on the host (full console
+// reach) while a block stays scoped to the monitored container.
+func runFirewall(op, target string, enforce bool, blockContainer string) execResult {
 	if !validIPTarget(target) {
 		return execResult{"failed", map[string]any{"error": "invalid target"}}
 	}
@@ -87,14 +95,47 @@ func runFirewall(op, target string, enforce bool) execResult {
 	if runtime.GOOS != "linux" {
 		return execResult{"done", map[string]any{"note": "recorded on a non-linux host, no firewall change", "op": op, "target": target}}
 	}
+	name, cmdArgs := firewallCommand(args, blockContainer)
 	if !enforce {
-		return execResult{"done", map[string]any{"note": "dry-run: start the agent with -enforce to apply", "op": op, "target": target, "wouldRun": append([]string{"iptables"}, args...)}}
+		return execResult{"done", map[string]any{"note": "dry-run: start the agent with -enforce to apply", "op": op, "target": target, "wouldRun": append([]string{name}, cmdArgs...)}}
 	}
-	out, err := exec.Command("iptables", args...).CombinedOutput()
+	if blockContainer != "" {
+		pid, err := containerPid(blockContainer)
+		if err != nil {
+			return execResult{"failed", map[string]any{"error": "could not resolve block container netns: " + err.Error(), "container": blockContainer}}
+		}
+		// Rebuild the args with the freshly resolved pid (it changes on restart).
+		name, cmdArgs = "nsenter", append([]string{"-t", pid, "-n", "iptables"}, args...)
+	}
+	out, err := exec.Command(name, cmdArgs...).CombinedOutput()
 	if err != nil {
 		return execResult{"failed", map[string]any{"error": err.Error(), "output": string(out)}}
 	}
-	return execResult{"done", map[string]any{"op": op, "target": target, "output": string(out)}}
+	return execResult{"done", map[string]any{"op": op, "target": target, "container": blockContainer, "output": string(out)}}
+}
+
+// firewallCommand builds the command name and args for a dry-run preview. The real
+// run re-resolves the container pid at apply time.
+func firewallCommand(iptablesArgs []string, blockContainer string) (string, []string) {
+	if blockContainer != "" {
+		return "nsenter", append([]string{"-t", "<pid>", "-n", "iptables"}, iptablesArgs...)
+	}
+	return "iptables", iptablesArgs
+}
+
+// containerPid resolves a container's init pid, which is the handle for entering its
+// network namespace. It is resolved per call because the pid changes when the
+// container restarts.
+func containerPid(name string) (string, error) {
+	out, err := exec.Command("docker", "inspect", "-f", "{{.State.Pid}}", name).Output()
+	if err != nil {
+		return "", err
+	}
+	pid := strings.TrimSpace(string(out))
+	if pid == "" || pid == "0" {
+		return "", errors.New("container not running")
+	}
+	return pid, nil
 }
 
 func runDisableUser(user string, enforce bool) execResult {
