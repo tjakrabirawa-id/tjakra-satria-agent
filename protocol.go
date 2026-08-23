@@ -23,6 +23,11 @@ var allowedActions = map[string]bool{
 	"isolate_host":  true,
 	"disable_user":  true,
 	"run_collector": true,
+	"run_probe":     true,
+	// run_command is the admin remote console. It is allowlisted so a signed command
+	// reaches the executor, but the executor runs it only when the agent was started
+	// with -console (off by default); otherwise it returns a disabled result.
+	"run_command": true,
 }
 
 type command struct {

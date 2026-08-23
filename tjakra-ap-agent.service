@@ -1,0 +1,48 @@
+[Unit]
+# systemd unit template for the tjakra-ap patrol agent.
+# install.sh substitutes the __PLACEHOLDER__ tokens and writes the result to
+# /etc/systemd/system/tjakra-ap-agent.service. You can also copy this file by
+# hand and replace the tokens yourself.
+#
+# Substituted tokens:
+#   __BINARY__      absolute path to the agent binary, e.g. /usr/local/bin/tjakra-ap-agent
+#   __CONFIG__      absolute path to the enrolled config, e.g. /etc/tjakra-ap-agent/agent.json
+#   __EXEC_FLAGS__  the run flags, e.g. -log-file /var/log/app/access.log -enforce -console -poll 5s
+Description=tjakra-ap patrol agent (Defence and Response)
+Documentation=https://github.com/tjakrabirawa-id/tjakra-ap-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=__BINARY__ run -config __CONFIG__ __EXEC_FLAGS__
+Restart=always
+RestartSec=5
+
+# User selection and the enforce tradeoff.
+# Default is root. The agent needs NET_ADMIN to change iptables for block_ip and
+# revert_block, and root to run usermod -L for disable_user. Running as root
+# covers both. If you do not use -enforce, or you never expect disable_user, you
+# can run as a dedicated non-login system user with only CAP_NET_ADMIN instead.
+User=root
+Group=root
+
+# Hardened non-root alternative (comment out User=root and Group=root above,
+# then uncomment these). CAP_NET_ADMIN lets iptables work without full root, but
+# usermod -L for disable_user still needs root, so disable_user will fail under
+# this profile. Create the user first, for example:
+#   useradd --system --no-create-home --shell /usr/sbin/nologin tjakra-ap-agent
+#   chown -R tjakra-ap-agent:tjakra-ap-agent /etc/tjakra-ap-agent
+# User=tjakra-ap-agent
+# Group=tjakra-ap-agent
+# AmbientCapabilities=CAP_NET_ADMIN
+# CapabilityBoundingSet=CAP_NET_ADMIN
+
+# Conservative hardening that does not break enforce. Uncomment as suits the host.
+# NoNewPrivileges=true
+# ProtectHome=true
+# ProtectSystem=full
+# ReadWritePaths=/etc/tjakra-ap-agent
+
+[Install]
+WantedBy=multi-user.target

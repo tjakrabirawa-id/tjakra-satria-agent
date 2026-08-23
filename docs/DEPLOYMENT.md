@@ -1,0 +1,194 @@
+# Deploying the tjakra-ap patrol agent
+
+Two supported patterns:
+
+1. systemd native, for a dedicated host where the agent runs directly on the OS.
+2. Shared network-namespace container, for a shared host where the agent must
+   enforce firewall rules that scope only to one target, not the whole host.
+
+Platform URLs:
+
+- Production: `https://pentest-api.tjakrabirawa.id`
+- Dev: `https://pentest-api-dev.tjakrabirawa.id`
+
+The enroll token comes from the platform console (NSOC, Patrol, "Enroll agent").
+It is single-use. Do not paste it into a file, a chat, or a shell history you
+keep. Pass it once to enroll or to `install.sh`.
+
+## Pattern 1: systemd native
+
+For a dedicated host, the one-command installer does everything: resolve or build
+the binary, install it, enroll, write the config, and install and start the
+service.
+
+```sh
+sudo ./install.sh \
+  --token <ENROLL_TOKEN> \
+  --server https://pentest-api.tjakrabirawa.id \
+  --log-file /var/log/app/access.log \
+  --enforce
+```
+
+What it does:
+
+- Installs the binary to `/usr/local/bin/tjakra-ap-agent`.
+- Creates `/etc/tjakra-ap-agent/` (0700) and writes the enrolled config to
+  `/etc/tjakra-ap-agent/agent.json` (0600).
+- Writes `/etc/systemd/system/tjakra-ap-agent.service` with the chosen flags baked
+  into `ExecStart`.
+- Runs `systemctl daemon-reload`, `enable`, and `restart`.
+
+Re-running the installer updates the unit and restarts the service. Enroll tokens
+are single-use, so a plain re-run keeps the existing enrollment; pass
+`--re-enroll` with a fresh token to replace it.
+
+### The enforce and user tradeoff
+
+`-enforce` lets the agent change the host. It needs privileges:
+
+- `block_ip` and `revert_block` run `iptables`, which needs `NET_ADMIN` (root or
+  `CAP_NET_ADMIN`).
+- `disable_user` runs `usermod -L`, which needs root.
+
+The installer defaults the service to `User=root`, which covers both. If you do
+not use `-enforce`, or you never expect `disable_user`, you can run as a dedicated
+non-login system user with only `CAP_NET_ADMIN`. The
+`tjakra-ap-agent.service` template shows that variant, commented, along with the
+caveat that `disable_user` still needs root under it.
+
+### Manual systemd install
+
+If you prefer to install by hand, build and place the binary, enroll, then copy
+the `tjakra-ap-agent.service` template and substitute the tokens:
+
+```sh
+go build -o tjakra-ap-agent .
+sudo install -m 0755 tjakra-ap-agent /usr/local/bin/tjakra-ap-agent
+sudo mkdir -p /etc/tjakra-ap-agent && sudo chmod 0700 /etc/tjakra-ap-agent
+sudo /usr/local/bin/tjakra-ap-agent enroll \
+  -server https://pentest-api.tjakrabirawa.id \
+  -token <ENROLL_TOKEN> \
+  -config /etc/tjakra-ap-agent/agent.json
+# edit the template: __BINARY__, __CONFIG__, __EXEC_FLAGS__
+sudo cp tjakra-ap-agent.service /etc/systemd/system/tjakra-ap-agent.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now tjakra-ap-agent.service
+```
+
+## Pattern 2: shared network-namespace container
+
+On a shared host that already runs other services (for example Jenkins and
+Infisical alongside a DVWA target), a host-level `iptables` DROP would block
+traffic for the whole host. The proven-safe pattern runs the agent in a container
+that shares the target's network namespace, so an `iptables -I INPUT` scopes only
+to the target's namespace and never touches the host or its other services.
+
+Build the image:
+
+```sh
+docker build -t tjakra-ap-agent:latest .
+```
+
+Enroll once to produce an `agent.json`, then bind-mount it into the container. You
+can enroll with the image itself:
+
+```sh
+docker run --rm \
+  -v "$PWD":/work \
+  tjakra-ap-agent:latest \
+  enroll -server https://pentest-api.tjakrabirawa.id -token <ENROLL_TOKEN> -config /work/agent.json
+```
+
+Run the agent sharing the target container's netns (here the target is
+`patrol-dvwa`):
+
+```sh
+docker run -d \
+  --name patrol-agent \
+  --network container:patrol-dvwa \
+  --cap-add NET_ADMIN \
+  --restart unless-stopped \
+  -v "$PWD/agent.json":/agent.json:ro \
+  -v /var/log/patrol-dvwa:/logs:ro \
+  tjakra-ap-agent:latest \
+  run -config /agent.json -log-file /logs/access.log -enforce
+```
+
+Notes:
+
+- `--network container:patrol-dvwa` puts the agent in the DVWA container's network
+  namespace. A block scopes to that namespace only. The host's Jenkins and
+  Infisical are untouched.
+- `--cap-add NET_ADMIN` lets the agent change iptables in that namespace without
+  full privilege.
+- Mount the target's access log read-only so the agent can tail and ship it.
+- `disable_user` is not meaningful in this container pattern (no host accounts),
+  so use it only in the native pattern.
+
+## RedTeam simulation note (run_probe)
+
+The platform's RedTeam simulation fires benign attack-signature requests at a
+target so the detection rules light up in the access log. When a target is bound
+to localhost for isolation, the platform cannot reach it directly. `run_probe`
+solves that: the agent, which is local to the target, sends the plain GET requests
+whose query strings carry the signature, so the simulation reaches a
+localhost-bound target. Nothing is exploited.
+
+`run_probe` is hard-restricted to a loopback or RFC1918 private target. A
+`localhost` host or a loopback or private IP is allowed; any other hostname is
+refused rather than resolved. So the platform can never turn an agent into a probe
+against an arbitrary internet host. At most 20 paths are fired per command, each
+with a 6 second timeout.
+
+In the shared-netns container pattern, the agent shares the target's namespace, so
+`http://127.0.0.1` from the agent reaches the target's own listener, which is
+exactly what a localhost-bound DVWA needs.
+
+## Remote console operational guide (run_command)
+
+`run_command` runs an operator-typed shell command on the host and returns the
+output. It exists for hands-on incident work where the fixed actions are not
+enough. It is the one action outside the deterministic allowlist model, so it is
+handled carefully:
+
+- Off by default. It is inert unless the agent is started with `-console`. Without
+  that flag it returns "remote console is disabled" and runs nothing. Do not set
+  `-console` unless you intend for an operator to drive this host interactively.
+- Still signed and admin-gated. Even with `-console`, the command must be signed
+  by the platform and is admin-gated on the platform side. `-console` is the local
+  operator's own consent, not a bypass of platform controls.
+- Audited. Every command and its output is recorded on the platform.
+- Never automated. The platform keeps `run_command` out of every playbook path, so
+  it can only be issued by a human operator, never by automation.
+- Bounded. A run is capped at a 30 second timeout and 64 KiB of output. A non-zero
+  exit is a normal result with an `exitCode`; only a command that could not start
+  or that timed out is reported as failed.
+
+The risk is real: an enabled, admin-issued remote console can run any command the
+service account can. Keep `-console` off on hosts that do not need it. When you do
+enable it, run the service as the least-privileged account that still meets your
+enforcement needs, and rely on the platform audit trail.
+
+## Verification checklist
+
+After install, confirm the agent is live and the command path works:
+
+- The service is active: `systemctl is-active tjakra-ap-agent.service` reports
+  `active`. For the container pattern, `docker ps` shows `patrol-agent` up.
+- The process is polling: `journalctl -u tjakra-ap-agent.service -f` (native) or
+  `docker logs -f patrol-agent` (container) shows
+  `agent <id> polling <server> every <interval>` and no repeated crash-restart.
+- The config is protected: `/etc/tjakra-ap-agent/agent.json` is mode 0600 and
+  owned by the service account.
+- The platform shows the agent connected: in the NSOC / Patrol agent list, the
+  agent's last check-in advances every poll interval.
+- The signed command path works end to end: issue a `run_collector` command from
+  the platform. It is non-destructive and needs no `-enforce`. The result returns
+  the host's hostname, os, and arch.
+- Enforcement is intended: only hosts that should change firewall or account state
+  run with `-enforce`. Confirm the startup log line reports enforce mode, not
+  dry-run, on those hosts and dry-run everywhere else.
+- The remote console is intended: only hosts that should accept interactive
+  operator commands run with `-console`. Confirm the startup log reports the
+  remote console enabled only where you meant it (and note the allowlist caveat
+  above).
