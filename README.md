@@ -231,6 +231,7 @@ Run:
 | `-log-file` | (none) | Log file to tail and ship. Omit to ship no logs. |
 | `-enforce` | off | Apply destructive actions instead of dry-run. |
 | `-console` | off | Enable the admin remote console (`run_command`). |
+| `-block-container` | (none) | Apply blocks inside this container's network namespace via `nsenter`, so a host-run agent keeps blocks scoped to the target instead of the host. See Pattern 3 in `docs/DEPLOYMENT.md`. |
 | `-poll` | `5s` | Command poll interval. |
 | `-insecure` | off | Skip TLS verification (dev only). |
 

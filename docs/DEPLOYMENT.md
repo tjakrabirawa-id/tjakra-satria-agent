@@ -124,6 +124,44 @@ Notes:
 - Mount the target's access log read-only so the agent can tail and ship it.
 - `disable_user` is not meaningful in this container pattern (no host accounts),
   so use it only in the native pattern.
+- Tradeoff: the shared-netns container has only the tools baked into its image, so
+  the remote console (`run_command`) sees that stripped container, not the host.
+  `docker ps`, `sudo`, and host processes are not there. If you need the console to
+  reach the host AND blocks to stay scoped to the target, use Pattern 3.
+
+## Pattern 3: host agent with a container-scoped block (recommended for a shared host)
+
+Network namespace (where a block lands) is independent of the PID and mount
+namespaces and the installed tools (what the console reaches). So you can run the
+agent natively on the host, where the console has full host reach, and still scope
+every block to a target container's network namespace. `-block-container <name>`
+does this: `block_ip` and `revert_block` run inside that container's netns via
+`nsenter`, resolving the container's pid at apply time (it changes on restart), so a
+DROP lands only in the target and never touches the host netfilter that carries the
+host's other services.
+
+The host needs `docker` and `nsenter` (util-linux), both standard. Run as root
+(nsenter, iptables, and the console all need it). systemd unit ExecStart:
+
+```
+ExecStart=/usr/local/bin/tjakra-ap-agent run \
+  -config /opt/tjakra-ap-agent-prod.json \
+  -log-file /opt/patrol-dvwa-logs/access.log \
+  -enforce -console -block-container patrol-dvwa
+```
+
+Notes:
+
+- The agent process is on the host, so `run_command` reaches the whole host. Keep
+  `-console` off on hosts that do not need it (it is host-root-equivalent), and rely
+  on the platform audit trail and the kill switch.
+- Blocks still scope to `patrol-dvwa`'s netns, so the host's Jenkins and Infisical
+  are untouched, the same guarantee as Pattern 2.
+- The target service's published port is where the agent reaches it. If the target
+  binds to loopback only (a DVWA on `127.0.0.1:8085`), set the resource address to
+  that loopback URL so a `run_probe` simulation fires there.
+- Without `-block-container`, blocks run in the host netns, which is correct only on
+  a single-purpose host that is itself the isolation boundary.
 
 ## RedTeam simulation note (run_probe)
 
