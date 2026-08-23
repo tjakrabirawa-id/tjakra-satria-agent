@@ -1,13 +1,16 @@
 // Command tjakra-ap-agent is the customer-installed patrol agent. It enrolls with a
 // one-time token from the platform, then ships logs up and runs allowlisted,
-// platform-signed commands down. It never runs a free-form shell command, verifies
-// every command against the platform key it pinned at enrollment, and treats
-// destructive actions as a dry-run unless started with -enforce.
+// platform-signed commands down. It verifies every command against the platform key
+// it pinned at enrollment, and treats destructive actions as a dry-run unless started
+// with -enforce. By default it runs only the fixed allowlisted actions and never a
+// free-form shell command; the one exception is the admin remote console
+// (run_command), which is inert unless the agent is started with -console, so an
+// operator explicitly consents to interactive control of this host.
 //
 // Usage:
 //
 //	tjakra-ap-agent enroll -server https://pentest-api.tjakrabirawa.id -token <token>
-//	tjakra-ap-agent run [-log-file /var/log/app.log] [-enforce] [-poll 5s]
+//	tjakra-ap-agent run [-log-file /var/log/app.log] [-enforce] [-console] [-poll 5s]
 package main
 
 import (
@@ -127,6 +130,7 @@ func cmdRun(args []string) {
 	confPath := fs.String("config", "tjakra-ap-agent.json", "agent config written by enroll")
 	logFile := fs.String("log-file", "", "optional log file to tail and ship")
 	enforce := fs.Bool("enforce", false, "actually apply destructive actions (default is a dry-run)")
+	console := fs.Bool("console", false, "enable the admin remote console (run_command); off by default")
 	poll := fs.Duration("poll", 5*time.Second, "command poll interval")
 	insecure := fs.Bool("insecure", false, "skip TLS verification (dev only)")
 	_ = fs.Parse(args)
@@ -145,17 +149,20 @@ func cmdRun(args []string) {
 	if !*enforce {
 		fmt.Println("running in dry-run mode: destructive actions are recorded but not applied (use -enforce to apply)")
 	}
+	if *console {
+		fmt.Println("remote console enabled: an admin operator can run commands on this host through the platform")
+	}
 	if *logFile != "" {
 		go shipLogs(cfg, client, *logFile)
 	}
 	fmt.Printf("agent %s polling %s every %s\n", cfg.AgentID, cfg.Server, poll.String())
 	for {
-		pollCommands(cfg, client, *enforce)
+		pollCommands(cfg, client, *enforce, *console)
 		time.Sleep(*poll)
 	}
 }
 
-func pollCommands(cfg config, client *http.Client, enforce bool) {
+func pollCommands(cfg config, client *http.Client, enforce, console bool) {
 	req, _ := http.NewRequest(http.MethodGet, cfg.Server+"/api/v1/agent/commands", nil)
 	req.Header.Set("Authorization", "Bearer "+cfg.AgentKey)
 	resp, err := client.Do(req)
@@ -179,7 +186,7 @@ func pollCommands(cfg config, client *http.Client, enforce bool) {
 			postResult(cfg, client, cmd.ID, "failed", map[string]any{"error": "refused: " + reason})
 			continue
 		}
-		res := executeCommand(cmd, enforce)
+		res := executeCommand(cmd, enforce, console)
 		postResult(cfg, client, cmd.ID, res.Status, res.Result)
 	}
 }
