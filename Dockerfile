@@ -15,7 +15,13 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/tjakra-ap-agent .
 FROM alpine:3.20
 RUN apk add --no-cache iptables ca-certificates
 COPY --from=build /out/tjakra-ap-agent /usr/local/bin/tjakra-ap-agent
-# The config is provided at run time by bind-mounting an enrolled agent.json.
-# Enforcing block_ip and revert_block needs NET_ADMIN, granted at docker run.
-ENTRYPOINT ["/usr/local/bin/tjakra-ap-agent"]
-CMD ["run", "-config", "/agent.json"]
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# The enrolled config lives on a data volume so it survives container replacement
+# and is never part of an image layer. Enforcing block_ip and revert_block needs
+# NET_ADMIN, granted at docker run.
+VOLUME ["/data"]
+# A bare `docker run` reads SERVER + ENROLL_TOKEN from the environment, enrolls on
+# first boot, and runs (see docker-entrypoint.sh). An explicit `enroll`/`run`
+# subcommand still runs the binary directly.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

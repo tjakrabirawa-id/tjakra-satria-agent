@@ -1,27 +1,68 @@
 # Deploying the tjakra-ap patrol agent
 
-Two supported patterns:
+Supported patterns:
 
+0. One-command Docker, the easiest path: a bare `docker run` enrolls on first boot
+   and runs. No repo to clone, no binary to build.
 1. systemd native, for a dedicated host where the agent runs directly on the OS.
 2. Shared network-namespace container, for a shared host where the agent must
    enforce firewall rules that scope only to one target, not the whole host.
 
-Platform URLs:
+Platform URLs (the `SERVER` / `--server` value is the platform BACKEND API base
+URL: the agent ships logs to it and polls signed commands from it):
 
 - Production: `https://pentest-api.tjakrabirawa.id`
 - Dev: `https://pentest-api-dev.tjakrabirawa.id`
+- Local: `http://localhost:4000` (or `http://host.docker.internal:4000` from a
+  container reaching a host-published backend)
 
-The enroll token comes from the platform console (NSOC, Patrol, "Enroll agent").
-It is single-use. Do not paste it into a file, a chat, or a shell history you
-keep. Pass it once to enroll or to `install.sh`.
+The enroll token comes from the platform console (Patrol, "Enroll agent"). It is
+single-use. Do not paste it into a file, a chat, or a shell history you keep. Pass
+it once, as `ENROLL_TOKEN` to `docker run`, or to `enroll` / `install.sh`.
+
+## Pattern 0: one-command Docker (easiest)
+
+The published image enrolls itself on first boot from two environment variables,
+then runs. The token is read from the environment only at run time; it is never
+baked into an image layer and is written nowhere but the 0600 config on the data
+volume.
+
+```sh
+docker run -d \
+  --name patrol-agent \
+  --cap-add NET_ADMIN \
+  --restart unless-stopped \
+  -e SERVER=https://pentest-api.tjakrabirawa.id \
+  -e ENROLL_TOKEN=<ENROLL_TOKEN> \
+  -v patrol-agent:/data \
+  aldovadev/tjakra-ap-agent:latest
+```
+
+The `-v patrol-agent:/data` named volume holds the enrolled `agent.json`, so the
+container can be replaced without re-enrolling (the token is single-use). Extra
+behavior is env-driven: `-e ENFORCE=1` to apply blocks (needs `NET_ADMIN`, above),
+`-e CONSOLE=1` for the remote console, `-e LOG_FILE=/logs/access.log` (mount the
+log with `-v /var/log/app:/logs:ro`) to tail and ship a log, `-e BLOCK_CONTAINER=<name>`
+to scope blocks to a target container's netns, `-e INSECURE=1` for a dev backend
+with a self-signed cert. To scope blocks to a target container instead of the host,
+add `--network container:<target>` (see Pattern 2).
+
+Confirm it enrolled: `docker logs patrol-agent` shows `enrolled agent <id> ...` then
+`agent <id> polling <server> every 5s`, and the agent appears on the Patrol Agents
+tab, online, within seconds.
+
+An explicit `enroll` or `run` subcommand after the image name still runs the binary
+directly, so the manual two-step flow in Pattern 2 keeps working.
 
 ## Pattern 1: systemd native
 
-For a dedicated host, the one-command installer does everything: resolve or build
-the binary, install it, enroll, write the config, and install and start the
-service.
+For a dedicated host, clone the public agent repo and run the installer: it does
+everything, resolve or build the binary, install it, enroll, write the config, and
+install and start the service.
 
 ```sh
+git clone https://github.com/tjakrabirawa-id/tjakra-ap-agent.git
+cd tjakra-ap-agent
 sudo ./install.sh \
   --token <ENROLL_TOKEN> \
   --server https://pentest-api.tjakrabirawa.id \

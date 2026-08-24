@@ -142,6 +142,34 @@ driven interactively. Every command and its output is written to the platform
 audit log. With `-console` off (the default) the executor returns a disabled
 result rather than running anything.
 
+## Run in Docker (easiest)
+
+The published image enrolls itself on first boot from `SERVER` and `ENROLL_TOKEN`,
+then runs. Nothing to clone or build. `SERVER` is the platform BACKEND API base URL
+(the agent ships logs to it and polls signed commands from it): `https://pentest-api.tjakrabirawa.id`
+in production, or `http://localhost:4000` (`http://host.docker.internal:4000` from a
+container) for a local backend.
+
+```sh
+docker run -d \
+  --name patrol-agent \
+  --cap-add NET_ADMIN \
+  --restart unless-stopped \
+  -e SERVER=https://pentest-api.tjakrabirawa.id \
+  -e ENROLL_TOKEN=<ENROLL_TOKEN> \
+  -v patrol-agent:/data \
+  aldovadev/tjakra-ap-agent:latest
+```
+
+The token is read from the environment only at run time; it is never baked into an
+image layer and is written nowhere but the 0600 config on the `/data` volume. Extra
+behavior is env-driven: `ENFORCE=1` (apply blocks, needs `NET_ADMIN`), `CONSOLE=1`
+(remote console), `LOG_FILE=/logs/access.log` (with `-v /var/log/app:/logs:ro`),
+`BLOCK_CONTAINER=<name>`, `INSECURE=1` (dev cert). See `docs/DEPLOYMENT.md` Pattern 0
+for the full one-command guide and Patterns 2 and 3 for the container/host netns
+variants. An explicit `enroll`/`run` subcommand after the image name runs the binary
+directly.
+
 ## Build
 
 ```sh
@@ -288,11 +316,14 @@ connected or online state in the NSOC / Patrol agent list. To confirm end to end
 
 ## Install
 
-For a one-command install on a Linux host, use `install.sh`. It resolves or builds
-the binary, installs it to `/usr/local/bin`, enrolls, writes the config to
-`/etc/tjakra-ap-agent/agent.json`, and installs and starts a systemd service.
+For a one-command install on a Linux host, clone this public repo and run
+`install.sh`. It resolves or builds the binary, installs it to `/usr/local/bin`,
+enrolls, writes the config to `/etc/tjakra-ap-agent/agent.json`, and installs and
+starts a systemd service.
 
 ```sh
+git clone https://github.com/tjakrabirawa-id/tjakra-ap-agent.git
+cd tjakra-ap-agent
 sudo ./install.sh --token <ENROLL_TOKEN> --server https://pentest-api.tjakrabirawa.id
 ```
 
