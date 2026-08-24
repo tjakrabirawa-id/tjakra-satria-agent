@@ -35,7 +35,7 @@ docker run -d \
   -e SERVER=https://pentest-api.tjakrabirawa.id \
   -e ENROLL_TOKEN=<ENROLL_TOKEN> \
   -v patrol-agent:/data \
-  aldovadev/tjakra-ap-agent:latest
+  tjakradev/tjakra-ap-agent:latest
 ```
 
 The `-v patrol-agent:/data` named volume holds the enrolled `agent.json`, so the

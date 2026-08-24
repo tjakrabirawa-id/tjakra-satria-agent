@@ -158,7 +158,7 @@ docker run -d \
   -e SERVER=https://pentest-api.tjakrabirawa.id \
   -e ENROLL_TOKEN=<ENROLL_TOKEN> \
   -v patrol-agent:/data \
-  aldovadev/tjakra-ap-agent:latest
+  tjakradev/tjakra-ap-agent:latest
 ```
 
 The token is read from the environment only at run time; it is never baked into an
