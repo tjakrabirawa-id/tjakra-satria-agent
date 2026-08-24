@@ -1,7 +1,7 @@
 #!/bin/sh
 # One-command onboarding for the tjakra-ap patrol agent in Docker.
 #
-# A bare `docker run ... aldovadev/tjakra-ap-agent` reads SERVER and ENROLL_TOKEN
+# A bare `docker run ... tjakradev/tjakra-ap-agent` reads SERVER and ENROLL_TOKEN
 # from the environment: on first boot, if no enrolled config exists at CONFIG, it
 # enrolls (single-use token) and writes the scoped config to the data volume, then
 # runs. The token is only ever read from the environment at run time; it is never
