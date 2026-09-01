@@ -28,6 +28,11 @@ var allowedActions = map[string]bool{
 	// reaches the executor, but the executor runs it only when the agent was started
 	// with -console (off by default); otherwise it returns a disabled result.
 	"run_command": true,
+	// read_logs is the per-agent log chat (plan F4): a read-only, allowlisted-path,
+	// bounded log read. It is a sibling of run_command with no shell path, so a chat
+	// can never reach the console. It runs unconditionally (not console-gated): reading
+	// an allowlisted log is the whole point, and it can never mutate or execute.
+	"read_logs": true,
 }
 
 type command struct {
