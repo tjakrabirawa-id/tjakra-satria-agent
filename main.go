@@ -132,6 +132,7 @@ func cmdRun(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	confPath := fs.String("config", "tjakra-ap-agent.json", "agent config written by enroll")
 	logFile := fs.String("log-file", "", "optional log file to tail and ship")
+	logAllow := fs.String("log-allow", "", "extra comma-separated log paths the read_logs chat may read (a trailing / is a directory prefix); joins the built-in default set and any -log-file")
 	enforce := fs.Bool("enforce", false, "actually apply destructive actions (default is a dry-run)")
 	console := fs.Bool("console", false, "enable the admin remote console (run_command); off by default")
 	blockContainer := fs.String("block-container", "", "apply blocks inside this container's network namespace via nsenter, so a host-run agent keeps blocks scoped to the target instead of the host")
@@ -162,14 +163,43 @@ func cmdRun(args []string) {
 	if *logFile != "" {
 		go shipLogs(cfg, client, *logFile)
 	}
+	// The read_logs chat (plan F4) may read only these paths: a built-in default set,
+	// the shipped -log-file, and any -log-allow / LOG_ALLOW entries. This is the agent's
+	// own compiled floor; the platform validates the planned path too, so neither a
+	// crafted question nor a compromised platform row can widen the read surface.
+	allow := buildLogAllow(*logFile, firstNonEmpty(*logAllow, os.Getenv("LOG_ALLOW")))
+	fmt.Printf("read_logs chat may read: %s\n", strings.Join(allow, ", "))
 	fmt.Printf("agent %s polling %s every %s\n", cfg.AgentID, cfg.Server, poll.String())
 	for {
-		pollCommands(cfg, client, *enforce, *console, *blockContainer)
+		pollCommands(cfg, client, *enforce, *console, *blockContainer, allow)
 		time.Sleep(*poll)
 	}
 }
 
-func pollCommands(cfg config, client *http.Client, enforce, console bool, blockContainer string) {
+// buildLogAllow assembles the read_logs allowlist: a sane default set, the shipped
+// -log-file (so a host already tailing a log can also answer questions about it), and
+// any operator-supplied extra entries. A trailing "/" makes an entry a directory prefix.
+func buildLogAllow(logFile, extra string) []string {
+	allow := []string{"/var/log/auth.log", "/var/log/syslog", "/var/log/app/"}
+	if s := strings.TrimSpace(logFile); s != "" {
+		allow = append(allow, s)
+	}
+	for _, e := range strings.Split(extra, ",") {
+		if s := strings.TrimSpace(e); s != "" {
+			allow = append(allow, s)
+		}
+	}
+	return allow
+}
+
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return a
+	}
+	return b
+}
+
+func pollCommands(cfg config, client *http.Client, enforce, console bool, blockContainer string, logAllow []string) {
 	req, _ := http.NewRequest(http.MethodGet, cfg.Server+"/api/v1/agent/commands", nil)
 	req.Header.Set("Authorization", "Bearer "+cfg.AgentKey)
 	resp, err := client.Do(req)
@@ -193,7 +223,7 @@ func pollCommands(cfg config, client *http.Client, enforce, console bool, blockC
 			postResult(cfg, client, cmd.ID, "failed", map[string]any{"error": "refused: " + reason})
 			continue
 		}
-		res := executeCommand(cmd, enforce, console, blockContainer)
+		res := executeCommand(cmd, enforce, console, blockContainer, logAllow)
 		postResult(cfg, client, cmd.ID, res.Status, res.Result)
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,7 +26,7 @@ type execResult struct {
 	Result map[string]any
 }
 
-func executeCommand(cmd command, enforce, console bool, blockContainer string) execResult {
+func executeCommand(cmd command, enforce, console bool, blockContainer string, logAllow []string) execResult {
 	var params map[string]any
 	_ = json.Unmarshal(cmd.Params, &params)
 	target, _ := params["target"].(string)
@@ -45,6 +46,8 @@ func executeCommand(cmd command, enforce, console bool, blockContainer string) e
 		return runProbe(cmd.Params)
 	case "run_command":
 		return runCommand(cmd.Params, console)
+	case "read_logs":
+		return runReadLogs(cmd.Params, logAllow)
 	}
 	return execResult{"failed", map[string]any{"error": "unknown action"}}
 }
@@ -256,6 +259,106 @@ func runCommand(rawParams json.RawMessage, console bool) execResult {
 	}
 	result["exitCode"] = 0
 	return execResult{"done", result}
+}
+
+// runReadLogs answers the per-agent log chat (plan F4). It is READ-ONLY and bounded:
+// it opens an ALLOWLISTED log path, optionally filters by a case-insensitive substring,
+// returns only the last maxLines (capped) and at most 64 KB, within a 30s timeout, and
+// NEVER touches a shell. It is a sibling switch case of run_command with no os/exec
+// path, so a chat can structurally never reach the remote console. The path is matched
+// against the compiled allowlist (an exact file, or a directory prefix ending in "/");
+// anything else, or any ".." traversal, is refused. sinceMins is accepted for wire
+// compatibility but this build bounds the read by maxLines, not by parsing timestamps.
+func runReadLogs(rawParams json.RawMessage, logAllow []string) execResult {
+	var p struct {
+		Path      string `json:"path"`
+		Grep      string `json:"grep"`
+		SinceMins int    `json:"sinceMins"`
+		MaxLines  int    `json:"maxLines"`
+	}
+	_ = json.Unmarshal(rawParams, &p)
+	path := strings.TrimSpace(p.Path)
+	if path == "" {
+		return execResult{"failed", map[string]any{"error": "no log path given"}}
+	}
+	if !logPathAllowed(path, logAllow) {
+		return execResult{"failed", map[string]any{"error": "log path is not allowlisted: " + path}}
+	}
+	maxLines := p.MaxLines
+	if maxLines <= 0 || maxLines > 2000 {
+		maxLines = 1000
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	f, err := os.Open(path)
+	if err != nil {
+		return execResult{"failed", map[string]any{"error": "could not open the log", "path": path}}
+	}
+	defer f.Close()
+
+	needle := strings.ToLower(strings.TrimSpace(p.Grep))
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	// Ring buffer of the last maxLines matching lines: a streaming tail that never
+	// holds the whole file, so a huge log cannot exhaust memory.
+	ring := make([]string, 0, maxLines)
+	matched := 0
+	for sc.Scan() {
+		if ctx.Err() != nil {
+			break
+		}
+		line := sc.Text()
+		if needle != "" && !strings.Contains(strings.ToLower(line), needle) {
+			continue
+		}
+		matched++
+		ring = append(ring, line)
+		if len(ring) > maxLines {
+			ring = ring[1:]
+		}
+	}
+	out := strings.Join(ring, "\n")
+	const outCap = 64 * 1024
+	truncated := false
+	if len(out) > outCap {
+		// Keep the TAIL within the cap: the most recent lines are the useful ones.
+		out = out[len(out)-outCap:]
+		truncated = true
+	}
+	return execResult{"done", map[string]any{
+		"path":      path,
+		"lines":     len(ring),
+		"matched":   matched,
+		"output":    out,
+		"truncated": truncated,
+		"grep":      p.Grep,
+	}}
+}
+
+// logPathAllowed reports whether path is admitted by the compiled allowlist. An entry
+// ending in "/" is a directory prefix (the path must be strictly inside it); any other
+// entry is an exact file match. A ".." anywhere is refused outright, so a traversal can
+// never escape an allowed directory. Plain string matching (not filepath) is used
+// because both the allowlist and the requested path are absolute paths in the target
+// host's own convention.
+func logPathAllowed(path string, allow []string) bool {
+	if path == "" || strings.Contains(path, "..") {
+		return false
+	}
+	for _, a := range allow {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		if strings.HasSuffix(a, "/") {
+			if strings.HasPrefix(path, a) && len(path) > len(a) {
+				return true
+			}
+		} else if path == a {
+			return true
+		}
+	}
+	return false
 }
 
 // isLocalProbeHost admits only a loopback or RFC1918 private target, so a probe can
