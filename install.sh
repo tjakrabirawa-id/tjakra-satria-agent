@@ -1,5 +1,5 @@
 #!/bin/sh
-# install.sh: one-command installer for the tjakra-ap patrol agent on a systemd
+# install.sh: one-command installer for the tjakra-satria patrol agent on a systemd
 # Linux host. It resolves or builds the binary, installs it to /usr/local/bin,
 # enrolls with the one-time token, writes the config, and installs and starts a
 # systemd service. Re-running updates the unit and restarts the service.
@@ -16,11 +16,11 @@ set -eu
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
-BIN_DEST=/usr/local/bin/tjakra-ap-agent
-CONFIG_DIR=/etc/tjakra-ap-agent
+BIN_DEST=/usr/local/bin/tjakra-satria-agent
+CONFIG_DIR=/etc/tjakra-satria-agent
 CONFIG_PATH="$CONFIG_DIR/agent.json"
-UNIT_PATH=/etc/systemd/system/tjakra-ap-agent.service
-SERVICE=tjakra-ap-agent.service
+UNIT_PATH=/etc/systemd/system/tjakra-satria-agent.service
+SERVICE=tjakra-satria-agent.service
 
 TOKEN=""
 SERVER=""
@@ -124,7 +124,7 @@ elif command -v go >/dev/null 2>&1; then
 else
 	echo "no --binary given and go is not installed." >&2
 	echo "build the binary on a machine with Go and pass it with --binary <path>:" >&2
-	echo "  GOOS=linux GOARCH=amd64 go build -o tjakra-ap-agent ." >&2
+	echo "  GOOS=linux GOARCH=amd64 go build -o tjakra-satria-agent ." >&2
 	exit 1
 fi
 
@@ -146,6 +146,24 @@ chmod 0700 "$CONFIG_DIR"
 if [ -s "$CONFIG_PATH" ] && [ "$RE_ENROLL" -eq 0 ]; then
 	echo "config already exists at $CONFIG_PATH; skipping enroll"
 	echo "(use --re-enroll with a fresh token to replace the enrollment)"
+	# Reconcile the server URL. The agent reads it only from the config file, so
+	# without this an operator passing --server against an existing install gets a
+	# clean run and no change at all: the platform URL is silently still the old
+	# one. That is the supported way to repoint an agent at a renamed host, and it
+	# must not require re-enrolling, which would spend a fresh token and leave a
+	# duplicate agent registered.
+	if [ -n "$SERVER" ]; then
+		CURRENT=$(sed -n 's/.*"server"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG_PATH" | head -1)
+		if [ -n "$CURRENT" ] && [ "$CURRENT" != "$SERVER" ]; then
+			cp "$CONFIG_PATH" "$CONFIG_PATH.bak"
+			tmp=$(mktemp)
+			sed "s#\"server\"[[:space:]]*:[[:space:]]*\"$CURRENT\"#\"server\": \"$SERVER\"#" "$CONFIG_PATH" > "$tmp"
+			cat "$tmp" > "$CONFIG_PATH"
+			rm -f "$tmp"
+			chmod 0600 "$CONFIG_PATH"
+			echo "repointed agent: $CURRENT -> $SERVER (previous config kept at $CONFIG_PATH.bak)"
+		fi
+	fi
 else
 	set -- enroll -server "$SERVER" -token "$TOKEN" -config "$CONFIG_PATH"
 	if [ "$INSECURE" -eq 1 ]; then
@@ -153,6 +171,23 @@ else
 	fi
 	"$BIN_DEST" "$@"
 	chmod 0600 "$CONFIG_PATH"
+fi
+
+# Migrate a host installed under the pre-SATRIA identity. Without this a
+# rebranded installer leaves the old unit enabled and the host ends up running
+# two agents that share one enrollment, double-polling the platform.
+LEGACY_SERVICE=tjakra-ap-agent.service
+LEGACY_CONFIG=/etc/tjakra-ap-agent/agent.json
+if [ -f "/etc/systemd/system/$LEGACY_SERVICE" ]; then
+	echo "found a pre-rebrand install; migrating"
+	systemctl stop "$LEGACY_SERVICE" 2>/dev/null || true
+	systemctl disable "$LEGACY_SERVICE" 2>/dev/null || true
+	if [ -s "$LEGACY_CONFIG" ] && [ ! -s "$CONFIG_PATH" ]; then
+		install -m 0600 "$LEGACY_CONFIG" "$CONFIG_PATH"
+		echo "carried the existing enrollment over; no new token needed"
+	fi
+	rm -f "/etc/systemd/system/$LEGACY_SERVICE" /usr/local/bin/tjakra-ap-agent
+	systemctl daemon-reload 2>/dev/null || true
 fi
 
 # Build the run flags for ExecStart.
@@ -172,13 +207,13 @@ fi
 EXEC_FLAGS=$(printf '%s' "$EXEC_FLAGS" | sed 's/^ *//')
 
 # Write the systemd unit. This installer writes the root variant. The standalone
-# tjakra-ap-agent.service template documents the non-login-user and
+# tjakra-satria-agent.service template documents the non-login-user and
 # CAP_NET_ADMIN variants for a hardened setup; keep the two in sync if you edit
 # either.
 cat > "$UNIT_PATH" <<EOF
 [Unit]
-Description=tjakra-ap patrol agent (Defence and Response)
-Documentation=https://github.com/tjakrabirawa-id/tjakra-ap-agent
+Description=tjakra-satria patrol agent (Defence and Response)
+Documentation=https://github.com/tjakrabirawa-id/tjakra-satria-agent
 After=network-online.target
 Wants=network-online.target
 
@@ -201,7 +236,7 @@ systemctl enable "$SERVICE"
 systemctl restart "$SERVICE"
 
 echo
-echo "tjakra-ap-agent installed and started."
+echo "tjakra-satria-agent installed and started."
 systemctl --no-pager --full status "$SERVICE" || true
 echo
 echo "Follow logs:   journalctl -u $SERVICE -f"

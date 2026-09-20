@@ -1,3 +1,3 @@
-module github.com/tjakrabirawa-id/tjakra-ap-agent
+module github.com/tjakrabirawa-id/tjakra-satria-agent
 
 go 1.23

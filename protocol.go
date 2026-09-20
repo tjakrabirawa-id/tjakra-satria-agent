@@ -46,12 +46,23 @@ type command struct {
 	ExpiresAt time.Time       `json:"expiresAt"`
 }
 
+// Command signing prefixes. The platform signs one of these and the agent
+// verifies against it, so the two must never be renamed in the same step: the
+// verifier has to accept the new prefix BEFORE the signer starts emitting it.
+// This agent release ships first and accepts both; the backend switches to
+// signingPrefix only once every enrolled agent carries this build.
+// legacySigningPrefix is dropped a release later, once no agent needs it.
+const (
+	signingPrefix       = "tjakra-satria-agent-cmd-v1\n"
+	legacySigningPrefix = "tjakra-ap-agent-cmd-v1\n"
+)
+
 // signingPayload rebuilds the exact bytes the platform signed. Field order and the
 // separator are frozen. params must be the raw JSON bytes as received (the platform
 // signed the canonical stored form, which is what the agent gets on the wire).
-func signingPayload(id, agentID, action string, params []byte, nonce string, expiresUnix int64) []byte {
+func signingPayload(prefix, id, agentID, action string, params []byte, nonce string, expiresUnix int64) []byte {
 	var b strings.Builder
-	b.WriteString("tjakra-ap-agent-cmd-v1\n")
+	b.WriteString(prefix)
 	b.WriteString(id)
 	b.WriteByte('|')
 	b.WriteString(agentID)
@@ -94,9 +105,14 @@ func verifyCommand(cmd command, platformPub string) (ok bool, reason string) {
 	if !cmd.ExpiresAt.IsZero() && time.Now().After(cmd.ExpiresAt) {
 		return false, "command expired"
 	}
-	payload := signingPayload(cmd.ID, cmd.AgentID, cmd.Action, cmd.Params, cmd.Nonce, cmd.ExpiresAt.Unix())
-	if !verifySignature(platformPub, payload, cmd.Signature) {
-		return false, "signature does not verify against the pinned platform key"
+	// Try the current prefix first, then the pre-rebrand one. Both are checked
+	// against the same pinned key, so accepting the legacy prefix widens nothing
+	// beyond the rename window: neither payload can be forged without that key.
+	for _, prefix := range []string{signingPrefix, legacySigningPrefix} {
+		payload := signingPayload(prefix, cmd.ID, cmd.AgentID, cmd.Action, cmd.Params, cmd.Nonce, cmd.ExpiresAt.Unix())
+		if verifySignature(platformPub, payload, cmd.Signature) {
+			return true, ""
+		}
 	}
-	return true, ""
+	return false, "signature does not verify against the pinned platform key"
 }

@@ -1,7 +1,7 @@
 #!/bin/sh
-# One-command onboarding for the tjakra-ap patrol agent in Docker.
+# One-command onboarding for the tjakra-satria patrol agent in Docker.
 #
-# A bare `docker run ... tjakradev/tjakra-ap-agent` reads SERVER and ENROLL_TOKEN
+# A bare `docker run ... tjakradev/tjakra-satria-agent` reads SERVER and ENROLL_TOKEN
 # from the environment: on first boot, if no enrolled config exists at CONFIG, it
 # enrolls (single-use token) and writes the scoped config to the data volume, then
 # runs. The token is only ever read from the environment at run time; it is never
@@ -13,7 +13,7 @@
 # and runs the binary directly, so the manual two-step flow still works.
 set -eu
 
-BIN=/usr/local/bin/tjakra-ap-agent
+BIN=/usr/local/bin/tjakra-satria-agent
 CONFIG="${CONFIG:-/data/agent.json}"
 
 # Advanced/manual mode: an explicit subcommand runs the binary as-is.

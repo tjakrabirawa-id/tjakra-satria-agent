@@ -1,6 +1,6 @@
-# tjakra-ap-agent
+# tjakra-satria-agent
 
-The customer-installed patrol agent for the tjakra-ap platform (Defence and
+The customer-installed patrol agent for the tjakra-satria platform (Defence and
 Response, Model B). It enrolls with a one-time token from the platform, ships log
 lines up so the platform can detect attacks, and runs allowlisted,
 platform-signed commands down (block an IP, revert a block, disable a user,
@@ -21,7 +21,7 @@ checklist, see `docs/DEPLOYMENT.md`. For a one-command install, see the
  token  |   | (tail -log-file)  |
         v   |                    |
    +-------------------------------------+
-   |            tjakra-ap-agent          |
+   |            tjakra-satria-agent          |
    |  enroll -> pin agentKey + pubKey    |
    |  run    -> ship logs                |
    |          -> poll GET /commands      |
@@ -52,7 +52,7 @@ strict.
   and the agent authenticates every request with the scoped key.
 - Every command is verified against the pinned platform key over a frozen signing
   payload that binds the command id, agent id, action, canonical params, a nonce,
-  and an expiry. The payload prefix is `tjakra-ap-agent-cmd-v1` and the format
+  and an expiry. The payload prefix is `tjakra-satria-agent-cmd-v1` and the format
   must match the platform's signer byte for byte. A stolen agent key or a tampered
   command cannot make the agent act, because neither can produce a valid platform
   signature.
@@ -158,7 +158,7 @@ docker run -d \
   -e SERVER=https://pentest-api.tjakrabirawa.id \
   -e ENROLL_TOKEN=<ENROLL_TOKEN> \
   -v patrol-agent:/data \
-  tjakradev/tjakra-ap-agent:latest
+  tjakradev/tjakra-satria-agent:latest
 ```
 
 The token is read from the environment only at run time; it is never baked into an
@@ -173,14 +173,14 @@ directly.
 ## Build
 
 ```sh
-go build -o tjakra-ap-agent .
+go build -o tjakra-satria-agent .
 ```
 
 That produces a single static binary. Cross-compile for a Linux target from any
 host with, for example:
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o tjakra-ap-agent .
+GOOS=linux GOARCH=amd64 go build -o tjakra-satria-agent .
 ```
 
 ## Enroll
@@ -189,10 +189,10 @@ The enroll token comes from the platform console (NSOC, Patrol, "Enroll agent").
 It is single-use.
 
 ```sh
-./tjakra-ap-agent enroll \
+./tjakra-satria-agent enroll \
   -server https://pentest-api.tjakrabirawa.id \
   -token <enroll-token> \
-  -config /etc/tjakra-ap-agent/agent.json
+  -config /etc/tjakra-satria-agent/agent.json
 ```
 
 Enroll posts the token to `POST <server>/api/v1/agent/enroll`, receives
@@ -206,7 +206,7 @@ be used against production.
 
 ## Config file
 
-`enroll` writes a JSON config, default path `tjakra-ap-agent.json`, mode 0600
+`enroll` writes a JSON config, default path `tjakra-satria-agent.json`, mode 0600
 (owner read and write only):
 
 ```json
@@ -222,13 +222,13 @@ be used against production.
 The `agentKey` is a live credential and `platformPublicKey` is the pin that makes
 signature verification trustworthy. Keep the file at 0600 and readable only by the
 account that runs the agent. The installer places it under
-`/etc/tjakra-ap-agent/agent.json` in a 0700 directory.
+`/etc/tjakra-satria-agent/agent.json` in a 0700 directory.
 
 ## Run
 
 ```sh
-./tjakra-ap-agent run \
-  -config /etc/tjakra-ap-agent/agent.json \
+./tjakra-satria-agent run \
+  -config /etc/tjakra-satria-agent/agent.json \
   -log-file /var/log/app/access.log \
   -enforce \
   -poll 5s
@@ -248,14 +248,14 @@ Enroll:
 | --- | --- | --- |
 | `-server` | (required) | Platform API base URL. |
 | `-token` | (required) | One-time enrollment token. |
-| `-config` | `tjakra-ap-agent.json` | Where to write the config. |
+| `-config` | `tjakra-satria-agent.json` | Where to write the config. |
 | `-insecure` | off | Skip TLS verification (dev only). |
 
 Run:
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `-config` | `tjakra-ap-agent.json` | Config written by enroll. |
+| `-config` | `tjakra-satria-agent.json` | Config written by enroll. |
 | `-log-file` | (none) | Log file to tail and ship. Omit to ship no logs. |
 | `-enforce` | off | Apply destructive actions instead of dry-run. |
 | `-console` | off | Enable the admin remote console (`run_command`). |
@@ -318,12 +318,12 @@ connected or online state in the NSOC / Patrol agent list. To confirm end to end
 
 For a one-command install on a Linux host, clone this public repo and run
 `install.sh`. It resolves or builds the binary, installs it to `/usr/local/bin`,
-enrolls, writes the config to `/etc/tjakra-ap-agent/agent.json`, and installs and
+enrolls, writes the config to `/etc/tjakra-satria-agent/agent.json`, and installs and
 starts a systemd service.
 
 ```sh
-git clone https://github.com/tjakrabirawa-id/tjakra-ap-agent.git
-cd tjakra-ap-agent
+git clone https://github.com/tjakrabirawa-id/tjakra-satria-agent.git
+cd tjakra-satria-agent
 sudo ./install.sh --token <ENROLL_TOKEN> --server https://pentest-api.tjakrabirawa.id
 ```
 

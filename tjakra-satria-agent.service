@@ -1,15 +1,15 @@
 [Unit]
-# systemd unit template for the tjakra-ap patrol agent.
+# systemd unit template for the tjakra-satria patrol agent.
 # install.sh substitutes the __PLACEHOLDER__ tokens and writes the result to
-# /etc/systemd/system/tjakra-ap-agent.service. You can also copy this file by
+# /etc/systemd/system/tjakra-satria-agent.service. You can also copy this file by
 # hand and replace the tokens yourself.
 #
 # Substituted tokens:
-#   __BINARY__      absolute path to the agent binary, e.g. /usr/local/bin/tjakra-ap-agent
-#   __CONFIG__      absolute path to the enrolled config, e.g. /etc/tjakra-ap-agent/agent.json
+#   __BINARY__      absolute path to the agent binary, e.g. /usr/local/bin/tjakra-satria-agent
+#   __CONFIG__      absolute path to the enrolled config, e.g. /etc/tjakra-satria-agent/agent.json
 #   __EXEC_FLAGS__  the run flags, e.g. -log-file /var/log/app/access.log -enforce -console -poll 5s
-Description=tjakra-ap patrol agent (Defence and Response)
-Documentation=https://github.com/tjakrabirawa-id/tjakra-ap-agent
+Description=tjakra-satria patrol agent (Defence and Response)
+Documentation=https://github.com/tjakrabirawa-id/tjakra-satria-agent
 After=network-online.target
 Wants=network-online.target
 
@@ -31,10 +31,10 @@ Group=root
 # then uncomment these). CAP_NET_ADMIN lets iptables work without full root, but
 # usermod -L for disable_user still needs root, so disable_user will fail under
 # this profile. Create the user first, for example:
-#   useradd --system --no-create-home --shell /usr/sbin/nologin tjakra-ap-agent
-#   chown -R tjakra-ap-agent:tjakra-ap-agent /etc/tjakra-ap-agent
-# User=tjakra-ap-agent
-# Group=tjakra-ap-agent
+#   useradd --system --no-create-home --shell /usr/sbin/nologin tjakra-satria-agent
+#   chown -R tjakra-satria-agent:tjakra-satria-agent /etc/tjakra-satria-agent
+# User=tjakra-satria-agent
+# Group=tjakra-satria-agent
 # AmbientCapabilities=CAP_NET_ADMIN
 # CapabilityBoundingSet=CAP_NET_ADMIN
 
@@ -42,7 +42,7 @@ Group=root
 # NoNewPrivileges=true
 # ProtectHome=true
 # ProtectSystem=full
-# ReadWritePaths=/etc/tjakra-ap-agent
+# ReadWritePaths=/etc/tjakra-satria-agent
 
 [Install]
 WantedBy=multi-user.target

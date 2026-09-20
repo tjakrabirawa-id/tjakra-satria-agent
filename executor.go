@@ -199,7 +199,7 @@ func runProbe(rawParams json.RawMessage) execResult {
 		if err != nil {
 			continue
 		}
-		req.Header.Set("User-Agent", "tjakra-ap-redteam/1.0 (agent probe)")
+		req.Header.Set("User-Agent", "tjakra-satria-redteam/1.0 (agent probe)")
 		resp, err := client.Do(req)
 		if err == nil {
 			_ = resp.Body.Close()

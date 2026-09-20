@@ -1,4 +1,4 @@
-# Deploying the tjakra-ap patrol agent
+# Deploying the tjakra-satria patrol agent
 
 Supported patterns:
 
@@ -35,7 +35,7 @@ docker run -d \
   -e SERVER=https://pentest-api.tjakrabirawa.id \
   -e ENROLL_TOKEN=<ENROLL_TOKEN> \
   -v patrol-agent:/data \
-  tjakradev/tjakra-ap-agent:latest
+  tjakradev/tjakra-satria-agent:latest
 ```
 
 The `-v patrol-agent:/data` named volume holds the enrolled `agent.json`, so the
@@ -61,8 +61,8 @@ everything, resolve or build the binary, install it, enroll, write the config, a
 install and start the service.
 
 ```sh
-git clone https://github.com/tjakrabirawa-id/tjakra-ap-agent.git
-cd tjakra-ap-agent
+git clone https://github.com/tjakrabirawa-id/tjakra-satria-agent.git
+cd tjakra-satria-agent
 sudo ./install.sh \
   --token <ENROLL_TOKEN> \
   --server https://pentest-api.tjakrabirawa.id \
@@ -72,10 +72,10 @@ sudo ./install.sh \
 
 What it does:
 
-- Installs the binary to `/usr/local/bin/tjakra-ap-agent`.
-- Creates `/etc/tjakra-ap-agent/` (0700) and writes the enrolled config to
-  `/etc/tjakra-ap-agent/agent.json` (0600).
-- Writes `/etc/systemd/system/tjakra-ap-agent.service` with the chosen flags baked
+- Installs the binary to `/usr/local/bin/tjakra-satria-agent`.
+- Creates `/etc/tjakra-satria-agent/` (0700) and writes the enrolled config to
+  `/etc/tjakra-satria-agent/agent.json` (0600).
+- Writes `/etc/systemd/system/tjakra-satria-agent.service` with the chosen flags baked
   into `ExecStart`.
 - Runs `systemctl daemon-reload`, `enable`, and `restart`.
 
@@ -94,26 +94,26 @@ are single-use, so a plain re-run keeps the existing enrollment; pass
 The installer defaults the service to `User=root`, which covers both. If you do
 not use `-enforce`, or you never expect `disable_user`, you can run as a dedicated
 non-login system user with only `CAP_NET_ADMIN`. The
-`tjakra-ap-agent.service` template shows that variant, commented, along with the
+`tjakra-satria-agent.service` template shows that variant, commented, along with the
 caveat that `disable_user` still needs root under it.
 
 ### Manual systemd install
 
 If you prefer to install by hand, build and place the binary, enroll, then copy
-the `tjakra-ap-agent.service` template and substitute the tokens:
+the `tjakra-satria-agent.service` template and substitute the tokens:
 
 ```sh
-go build -o tjakra-ap-agent .
-sudo install -m 0755 tjakra-ap-agent /usr/local/bin/tjakra-ap-agent
-sudo mkdir -p /etc/tjakra-ap-agent && sudo chmod 0700 /etc/tjakra-ap-agent
-sudo /usr/local/bin/tjakra-ap-agent enroll \
+go build -o tjakra-satria-agent .
+sudo install -m 0755 tjakra-satria-agent /usr/local/bin/tjakra-satria-agent
+sudo mkdir -p /etc/tjakra-satria-agent && sudo chmod 0700 /etc/tjakra-satria-agent
+sudo /usr/local/bin/tjakra-satria-agent enroll \
   -server https://pentest-api.tjakrabirawa.id \
   -token <ENROLL_TOKEN> \
-  -config /etc/tjakra-ap-agent/agent.json
+  -config /etc/tjakra-satria-agent/agent.json
 # edit the template: __BINARY__, __CONFIG__, __EXEC_FLAGS__
-sudo cp tjakra-ap-agent.service /etc/systemd/system/tjakra-ap-agent.service
+sudo cp tjakra-satria-agent.service /etc/systemd/system/tjakra-satria-agent.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now tjakra-ap-agent.service
+sudo systemctl enable --now tjakra-satria-agent.service
 ```
 
 ## Pattern 2: shared network-namespace container
@@ -127,7 +127,7 @@ to the target's namespace and never touches the host or its other services.
 Build the image:
 
 ```sh
-docker build -t tjakra-ap-agent:latest .
+docker build -t tjakra-satria-agent:latest .
 ```
 
 Enroll once to produce an `agent.json`, then bind-mount it into the container. You
@@ -136,7 +136,7 @@ can enroll with the image itself:
 ```sh
 docker run --rm \
   -v "$PWD":/work \
-  tjakra-ap-agent:latest \
+  tjakra-satria-agent:latest \
   enroll -server https://pentest-api.tjakrabirawa.id -token <ENROLL_TOKEN> -config /work/agent.json
 ```
 
@@ -151,7 +151,7 @@ docker run -d \
   --restart unless-stopped \
   -v "$PWD/agent.json":/agent.json:ro \
   -v /var/log/patrol-dvwa:/logs:ro \
-  tjakra-ap-agent:latest \
+  tjakra-satria-agent:latest \
   run -config /agent.json -log-file /logs/access.log -enforce
 ```
 
@@ -185,8 +185,8 @@ The host needs `docker` and `nsenter` (util-linux), both standard. Run as root
 (nsenter, iptables, and the console all need it). systemd unit ExecStart:
 
 ```
-ExecStart=/usr/local/bin/tjakra-ap-agent run \
-  -config /opt/tjakra-ap-agent-prod.json \
+ExecStart=/usr/local/bin/tjakra-satria-agent run \
+  -config /opt/tjakra-satria-agent-prod.json \
   -log-file /opt/patrol-dvwa-logs/access.log \
   -enforce -console -block-container patrol-dvwa
 ```
@@ -252,12 +252,12 @@ enforcement needs, and rely on the platform audit trail.
 
 After install, confirm the agent is live and the command path works:
 
-- The service is active: `systemctl is-active tjakra-ap-agent.service` reports
+- The service is active: `systemctl is-active tjakra-satria-agent.service` reports
   `active`. For the container pattern, `docker ps` shows `patrol-agent` up.
-- The process is polling: `journalctl -u tjakra-ap-agent.service -f` (native) or
+- The process is polling: `journalctl -u tjakra-satria-agent.service -f` (native) or
   `docker logs -f patrol-agent` (container) shows
   `agent <id> polling <server> every <interval>` and no repeated crash-restart.
-- The config is protected: `/etc/tjakra-ap-agent/agent.json` is mode 0600 and
+- The config is protected: `/etc/tjakra-satria-agent/agent.json` is mode 0600 and
   owned by the service account.
 - The platform shows the agent connected: in the NSOC / Patrol agent list, the
   agent's last check-in advances every poll interval.
