@@ -1,4 +1,4 @@
-# Multi-stage build for the tjakra-ap patrol agent.
+# Multi-stage build for the tjakra-satria patrol agent.
 # Stage 1 builds a static binary. Stage 2 is a small alpine image with iptables
 # and ca-certificates, for the shared network-namespace enforcement pattern
 # (see docs/DEPLOYMENT.md).
@@ -10,11 +10,11 @@ COPY go.mod ./
 RUN go mod download
 COPY . .
 # CGO off produces a static binary that runs on the alpine base without libc.
-RUN CGO_ENABLED=0 go build -trimpath -o /out/tjakra-ap-agent .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/tjakra-satria-agent .
 
 FROM alpine:3.20
 RUN apk add --no-cache iptables ca-certificates
-COPY --from=build /out/tjakra-ap-agent /usr/local/bin/tjakra-ap-agent
+COPY --from=build /out/tjakra-satria-agent /usr/local/bin/tjakra-satria-agent
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # The enrolled config lives on a data volume so it survives container replacement

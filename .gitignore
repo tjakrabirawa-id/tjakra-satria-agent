@@ -1,4 +1,10 @@
+# Build output, both the current name and the pre-rebrand one. Without the old
+# entries a stale binary from before the rename becomes tracked; without the new
+# ones the next build does.
+/tjakra-satria-agent
+/tjakra-satria-agent.exe
 /tjakra-ap-agent
 /tjakra-ap-agent.exe
 *.exe
+tjakra-satria-agent.json
 tjakra-ap-agent.json

@@ -1,4 +1,4 @@
-// Command tjakra-ap-agent is the customer-installed patrol agent. It enrolls with a
+// Command tjakra-satria-agent is the customer-installed patrol agent. It enrolls with a
 // one-time token from the platform, then ships logs up and runs allowlisted,
 // platform-signed commands down. It verifies every command against the platform key
 // it pinned at enrollment, and treats destructive actions as a dry-run unless started
@@ -9,8 +9,8 @@
 //
 // Usage:
 //
-//	tjakra-ap-agent enroll -server https://pentest-api.tjakrabirawa.id -token <token>
-//	tjakra-ap-agent run [-log-file /var/log/app.log] [-enforce] [-console] [-block-container NAME] [-poll 5s]
+//	tjakra-satria-agent enroll -server https://pentest-api.tjakrabirawa.id -token <token>
+//	tjakra-satria-agent run [-log-file /var/log/app.log] [-enforce] [-console] [-block-container NAME] [-poll 5s]
 //
 // Run on the host for full console reach and pass -block-container to keep blocks
 // scoped to a target container's network namespace instead of the host.
@@ -52,6 +52,13 @@ func unwrap(body []byte) json.RawMessage {
 	return e.Details.Reply.Data
 }
 
+// agentVersion is reported on every authenticated request so an operator can
+// tell which hosts are still on an old build, and (with the endpoint the
+// platform observes) which are still calling a hostname due to be retired.
+// Without it a stale agent is indistinguishable from a healthy one, and the
+// only failure signal is silence.
+const agentVersion = "1.1.0"
+
 func newClient(insecure bool) *http.Client {
 	tr := &http.Transport{}
 	if insecure {
@@ -62,7 +69,7 @@ func newClient(insecure bool) *http.Client {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: tjakra-ap-agent <enroll|run> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: tjakra-satria-agent <enroll|run> [flags]")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -80,7 +87,7 @@ func cmdEnroll(args []string) {
 	fs := flag.NewFlagSet("enroll", flag.ExitOnError)
 	server := fs.String("server", "", "platform API base URL, e.g. https://pentest-api.tjakrabirawa.id")
 	token := fs.String("token", "", "one-time enrollment token from the platform")
-	confPath := fs.String("config", "tjakra-ap-agent.json", "where to write the agent config")
+	confPath := fs.String("config", "tjakra-satria-agent.json", "where to write the agent config")
 	insecure := fs.Bool("insecure", false, "skip TLS verification (dev only)")
 	_ = fs.Parse(args)
 	if *server == "" || *token == "" {
@@ -130,7 +137,7 @@ func cmdEnroll(args []string) {
 
 func cmdRun(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	confPath := fs.String("config", "tjakra-ap-agent.json", "agent config written by enroll")
+	confPath := fs.String("config", "tjakra-satria-agent.json", "agent config written by enroll")
 	logFile := fs.String("log-file", "", "optional log file to tail and ship")
 	logAllow := fs.String("log-allow", "", "extra comma-separated log paths the read_logs chat may read (a trailing / is a directory prefix); joins the built-in default set and any -log-file")
 	enforce := fs.Bool("enforce", false, "actually apply destructive actions (default is a dry-run)")
@@ -202,6 +209,7 @@ func firstNonEmpty(a, b string) string {
 func pollCommands(cfg config, client *http.Client, enforce, console bool, blockContainer string, logAllow []string) {
 	req, _ := http.NewRequest(http.MethodGet, cfg.Server+"/api/v1/agent/commands", nil)
 	req.Header.Set("Authorization", "Bearer "+cfg.AgentKey)
+	req.Header.Set("X-Agent-Version", agentVersion)
 	resp, err := client.Do(req)
 	if err != nil {
 		return
@@ -232,6 +240,7 @@ func postResult(cfg config, client *http.Client, id, status string, result map[s
 	body, _ := json.Marshal(map[string]any{"status": status, "result": result})
 	req, _ := http.NewRequest(http.MethodPost, cfg.Server+"/api/v1/agent/commands/"+id+"/result", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+cfg.AgentKey)
+	req.Header.Set("X-Agent-Version", agentVersion)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err == nil {
@@ -287,6 +296,7 @@ func shipLogs(cfg config, client *http.Client, path string) {
 		body, _ := json.Marshal(map[string]any{"events": events})
 		req, _ := http.NewRequest(http.MethodPost, cfg.Server+"/api/v1/agent/logs", bytes.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+cfg.AgentKey)
+		req.Header.Set("X-Agent-Version", agentVersion)
 		req.Header.Set("Content-Type", "application/json")
 		if resp, err := client.Do(req); err == nil {
 			_ = resp.Body.Close()
