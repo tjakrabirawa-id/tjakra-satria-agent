@@ -11,8 +11,8 @@ Supported patterns:
 Platform URLs (the `SERVER` / `--server` value is the platform BACKEND API base
 URL: the agent ships logs to it and polls signed commands from it):
 
-- Production: `https://pentest-api.tjakrabirawa.id`
-- Dev: `https://pentest-api-dev.tjakrabirawa.id`
+- Production: `https://satria-api.tjakrabirawa.id`
+- Dev: `https://satria-api-dev.tjakrabirawa.id`
 - Local: `http://localhost:4000` (or `http://host.docker.internal:4000` from a
   container reaching a host-published backend)
 
@@ -32,7 +32,7 @@ docker run -d \
   --name patrol-agent \
   --cap-add NET_ADMIN \
   --restart unless-stopped \
-  -e SERVER=https://pentest-api.tjakrabirawa.id \
+  -e SERVER=https://satria-api.tjakrabirawa.id \
   -e ENROLL_TOKEN=<ENROLL_TOKEN> \
   -v patrol-agent:/data \
   tjakradev/tjakra-satria-agent:latest
@@ -65,7 +65,7 @@ git clone https://github.com/tjakrabirawa-id/tjakra-satria-agent.git
 cd tjakra-satria-agent
 sudo ./install.sh \
   --token <ENROLL_TOKEN> \
-  --server https://pentest-api.tjakrabirawa.id \
+  --server https://satria-api.tjakrabirawa.id \
   --log-file /var/log/app/access.log \
   --enforce
 ```
@@ -107,7 +107,7 @@ go build -o tjakra-satria-agent .
 sudo install -m 0755 tjakra-satria-agent /usr/local/bin/tjakra-satria-agent
 sudo mkdir -p /etc/tjakra-satria-agent && sudo chmod 0700 /etc/tjakra-satria-agent
 sudo /usr/local/bin/tjakra-satria-agent enroll \
-  -server https://pentest-api.tjakrabirawa.id \
+  -server https://satria-api.tjakrabirawa.id \
   -token <ENROLL_TOKEN> \
   -config /etc/tjakra-satria-agent/agent.json
 # edit the template: __BINARY__, __CONFIG__, __EXEC_FLAGS__
@@ -137,7 +137,7 @@ can enroll with the image itself:
 docker run --rm \
   -v "$PWD":/work \
   tjakra-satria-agent:latest \
-  enroll -server https://pentest-api.tjakrabirawa.id -token <ENROLL_TOKEN> -config /work/agent.json
+  enroll -server https://satria-api.tjakrabirawa.id -token <ENROLL_TOKEN> -config /work/agent.json
 ```
 
 Run the agent sharing the target container's netns (here the target is

@@ -15,7 +15,7 @@ checklist, see `docs/DEPLOYMENT.md`. For a one-command install, see the
 ## What the agent does
 
 ```
-  platform (pentest-api.tjakrabirawa.id)
+  platform (satria-api.tjakrabirawa.id)
         |   ^                    ^
  enroll |   | logs              | command results
  token  |   | (tail -log-file)  |
@@ -146,7 +146,7 @@ result rather than running anything.
 
 The published image enrolls itself on first boot from `SERVER` and `ENROLL_TOKEN`,
 then runs. Nothing to clone or build. `SERVER` is the platform BACKEND API base URL
-(the agent ships logs to it and polls signed commands from it): `https://pentest-api.tjakrabirawa.id`
+(the agent ships logs to it and polls signed commands from it): `https://satria-api.tjakrabirawa.id`
 in production, or `http://localhost:4000` (`http://host.docker.internal:4000` from a
 container) for a local backend.
 
@@ -155,7 +155,7 @@ docker run -d \
   --name patrol-agent \
   --cap-add NET_ADMIN \
   --restart unless-stopped \
-  -e SERVER=https://pentest-api.tjakrabirawa.id \
+  -e SERVER=https://satria-api.tjakrabirawa.id \
   -e ENROLL_TOKEN=<ENROLL_TOKEN> \
   -v patrol-agent:/data \
   tjakradev/tjakra-satria-agent:latest
@@ -190,7 +190,7 @@ It is single-use.
 
 ```sh
 ./tjakra-satria-agent enroll \
-  -server https://pentest-api.tjakrabirawa.id \
+  -server https://satria-api.tjakrabirawa.id \
   -token <enroll-token> \
   -config /etc/tjakra-satria-agent/agent.json
 ```
@@ -200,7 +200,7 @@ Enroll posts the token to `POST <server>/api/v1/agent/enroll`, receives
 the config file with mode 0600. If the platform returns no signing key, enroll
 prints a warning that the command channel is disabled on the platform side.
 
-Dev platform: `https://pentest-api-dev.tjakrabirawa.id`. Add `-insecure` only for a
+Dev platform: `https://satria-api-dev.tjakrabirawa.id`. Add `-insecure` only for a
 dev target with an untrusted certificate; it skips TLS verification and must not
 be used against production.
 
@@ -211,7 +211,7 @@ be used against production.
 
 ```json
 {
-  "server": "https://pentest-api.tjakrabirawa.id",
+  "server": "https://satria-api.tjakrabirawa.id",
   "agentId": "<agent id>",
   "agentKey": "<scoped bearer key>",
   "platformPublicKey": "<base64 ed25519 public key>",
@@ -324,7 +324,7 @@ starts a systemd service.
 ```sh
 git clone https://github.com/tjakrabirawa-id/tjakra-satria-agent.git
 cd tjakra-satria-agent
-sudo ./install.sh --token <ENROLL_TOKEN> --server https://pentest-api.tjakrabirawa.id
+sudo ./install.sh --token <ENROLL_TOKEN> --server https://satria-api.tjakrabirawa.id
 ```
 
 See `docs/DEPLOYMENT.md` for the full install options, the shared-netns container

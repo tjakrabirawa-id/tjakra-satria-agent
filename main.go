@@ -9,7 +9,7 @@
 //
 // Usage:
 //
-//	tjakra-satria-agent enroll -server https://pentest-api.tjakrabirawa.id -token <token>
+//	tjakra-satria-agent enroll -server https://satria-api.tjakrabirawa.id -token <token>
 //	tjakra-satria-agent run [-log-file /var/log/app.log] [-enforce] [-console] [-block-container NAME] [-poll 5s]
 //
 // Run on the host for full console reach and pass -block-container to keep blocks
@@ -85,7 +85,7 @@ func main() {
 
 func cmdEnroll(args []string) {
 	fs := flag.NewFlagSet("enroll", flag.ExitOnError)
-	server := fs.String("server", "", "platform API base URL, e.g. https://pentest-api.tjakrabirawa.id")
+	server := fs.String("server", "", "platform API base URL, e.g. https://satria-api.tjakrabirawa.id")
 	token := fs.String("token", "", "one-time enrollment token from the platform")
 	confPath := fs.String("config", "tjakra-satria-agent.json", "where to write the agent config")
 	insecure := fs.Bool("insecure", false, "skip TLS verification (dev only)")

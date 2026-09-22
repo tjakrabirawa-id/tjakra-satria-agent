@@ -47,7 +47,7 @@ Usage: sudo ./install.sh --token <ENROLL_TOKEN> --server <PLATFORM_URL> [options
 
 Required:
   --token <token>     One-time enrollment token from the platform.
-  --server <url>      Platform API base URL, e.g. https://pentest-api.tjakrabirawa.id
+  --server <url>      Platform API base URL, e.g. https://satria-api.tjakrabirawa.id
 
 Options:
   --log-file <path>   Log file the agent tails and ships up.
