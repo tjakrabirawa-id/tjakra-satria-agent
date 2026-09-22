@@ -15,9 +15,6 @@ func TestSigningPrefixLiterals(t *testing.T) {
 	if signingPrefix != "tjakra-satria-agent-cmd-v1\n" {
 		t.Fatalf("current signing prefix changed: %q", signingPrefix)
 	}
-	if legacySigningPrefix != "tjakra-ap-agent-cmd-v1\n" {
-		t.Fatalf("legacy signing prefix changed: %q", legacySigningPrefix)
-	}
 }
 
 func signedCommand(t *testing.T, priv ed25519.PrivateKey, prefix string) command {
@@ -35,24 +32,23 @@ func signedCommand(t *testing.T, priv ed25519.PrivateKey, prefix string) command
 	return cmd
 }
 
-// The whole point of the dual-verify window: a platform still signing the
-// pre-rebrand prefix and one already signing the new prefix must both be
-// accepted by this build, or the rename bricks every deployed agent.
-func TestVerifyCommandAcceptsBothPrefixes(t *testing.T) {
+// The dual-verify window is closed: a command signed with the current prefix is
+// accepted, and one signed with the pre-rebrand legacy prefix is now rejected.
+func TestVerifyCommandAcceptsCurrentRejectsLegacy(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pubB64 := base64.StdEncoding.EncodeToString(pub)
 
-	for name, prefix := range map[string]string{
-		"current": signingPrefix,
-		"legacy":  legacySigningPrefix,
-	} {
-		cmd := signedCommand(t, priv, prefix)
-		if ok, reason := verifyCommand(cmd, pubB64); !ok {
-			t.Fatalf("%s prefix rejected: %s", name, reason)
-		}
+	cmd := signedCommand(t, priv, signingPrefix)
+	if ok, reason := verifyCommand(cmd, pubB64); !ok {
+		t.Fatalf("current prefix rejected: %s", reason)
+	}
+
+	legacy := signedCommand(t, priv, "tjakra-ap-agent-cmd-v1\n")
+	if ok, _ := verifyCommand(legacy, pubB64); ok {
+		t.Fatal("a legacy-prefix command still verified after the dual-verify window closed")
 	}
 }
 
