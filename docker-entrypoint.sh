@@ -39,6 +39,25 @@ if [ ! -f "$CONFIG" ]; then
     echo "pass -e SERVER=<platform api url> -e ENROLL_TOKEN=<one-time token>, or mount an enrolled agent.json at $CONFIG." >&2
     exit 1
   fi
+else
+  # A config already exists on the data volume, so we do not re-enroll: the token
+  # is single-use. But reconcile the server URL from the SERVER env, matching the
+  # install.sh --server behavior. The agent reads the platform URL only from the
+  # config, so a container restarted with a changed SERVER (repointed at a renamed
+  # host) would otherwise keep polling the old URL silently. This repoints the
+  # agent in place without spending a fresh enrollment token.
+  if [ -n "${SERVER:-}" ]; then
+    CURRENT=$(sed -n 's/.*"server"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG" | head -1)
+    if [ -n "$CURRENT" ] && [ "$CURRENT" != "$SERVER" ]; then
+      cp "$CONFIG" "$CONFIG.bak"
+      tmp=$(mktemp)
+      sed "s#\"server\"[[:space:]]*:[[:space:]]*\"$CURRENT\"#\"server\": \"$SERVER\"#" "$CONFIG" > "$tmp"
+      cat "$tmp" > "$CONFIG"
+      rm -f "$tmp"
+      chmod 0600 "$CONFIG"
+      echo "repointed agent: $CURRENT -> $SERVER (previous config kept at $CONFIG.bak)"
+    fi
+  fi
 fi
 
 # Assemble the run flags from the environment.
