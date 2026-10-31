@@ -33,6 +33,10 @@ var allowedActions = map[string]bool{
 	// can never reach the console. It runs unconditionally (not console-gated): reading
 	// an allowlisted log is the whole point, and it can never mutate or execute.
 	"read_logs": true,
+	// collect_artifacts is DFIR > Artifact Analysis: a read-only, bounded collection of
+	// named artifacts. The params name artifact TYPES only; each maps to sources
+	// compiled into collect.go, so the platform can never name a path or a command.
+	"collect_artifacts": true,
 }
 
 type command struct {
