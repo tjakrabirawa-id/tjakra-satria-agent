@@ -37,6 +37,10 @@ var allowedActions = map[string]bool{
 	// named artifacts. The params name artifact TYPES only; each maps to sources
 	// compiled into collect.go, so the platform can never name a path or a command.
 	"collect_artifacts": true,
+	// collect_memory is DFIR > Memory Analysis: read-only live triage of volatile
+	// process memory from /proc (memory.go). Fixed type names and a size cap only; no
+	// RAM image, no kernel module, nothing written, the agent's own memory skipped.
+	"collect_memory": true,
 }
 
 type command struct {
