@@ -73,6 +73,12 @@ type collectedArtifact struct {
 }
 
 func runCollectArtifacts(rawParams json.RawMessage) execResult {
+	return runCollect(rawParams, artifactSpecs)
+}
+
+// runCollect is shared by collect_artifacts and collect_memory: it validates the type
+// names against the given fixed spec table, then collects, caps and hashes each one.
+func runCollect(rawParams json.RawMessage, specs map[string]artifactSpec) execResult {
 	var p struct {
 		Types    []string `json:"types"`
 		MaxBytes int      `json:"maxBytes"`
@@ -81,11 +87,11 @@ func runCollectArtifacts(rawParams json.RawMessage) execResult {
 	if len(p.Types) == 0 {
 		return execResult{"failed", map[string]any{"error": "no artifact types given"}}
 	}
-	if len(p.Types) > len(artifactSpecs) {
+	if len(p.Types) > len(specs) {
 		return execResult{"failed", map[string]any{"error": "too many artifact types"}}
 	}
 	for _, t := range p.Types {
-		if _, ok := artifactSpecs[t]; !ok {
+		if _, ok := specs[t]; !ok {
 			return execResult{"failed", map[string]any{"error": "unknown artifact type: " + t}}
 		}
 	}
@@ -105,7 +111,7 @@ func runCollectArtifacts(rawParams json.RawMessage) execResult {
 			continue
 		}
 		seen[t] = true
-		a := collectOne(t, limit)
+		a := collectOne(t, specs[t], limit)
 		if total+len(a.Content) > maxCollectionBytes {
 			keep := maxCollectionBytes - total
 			if keep < 0 {
@@ -121,8 +127,7 @@ func runCollectArtifacts(rawParams json.RawMessage) execResult {
 	return execResult{"done", map[string]any{"hostname": host, "collectedAt": time.Now().UTC().Format(time.RFC3339), "artifacts": out}}
 }
 
-func collectOne(t string, limit int) collectedArtifact {
-	spec := artifactSpecs[t]
+func collectOne(t string, spec artifactSpec, limit int) collectedArtifact {
 	a := collectedArtifact{Type: t}
 	var content string
 	if spec.gen != nil {
