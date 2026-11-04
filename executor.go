@@ -51,6 +51,8 @@ func executeCommand(cmd command, enforce, console bool, blockContainer string, l
 		return runCommand(cmd.Params, console)
 	case "read_logs":
 		return runReadLogs(cmd.Params, logAllow)
+	case "collect_artifacts":
+		return runCollectArtifacts(cmd.Params)
 	}
 	return execResult{"failed", map[string]any{"error": "unknown action"}}
 }
